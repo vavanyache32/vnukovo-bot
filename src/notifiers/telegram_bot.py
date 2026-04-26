@@ -122,8 +122,9 @@ class TelegramBot:
         from ..parser.metar import parse_metar
         from ..sources import awc
 
+        slug = await self._default_slug()
         cfg = get_stations()
-        station = cfg.by_key(self.s.default_city)
+        station = cfg.by_slug(slug) if slug else cfg.by_key(self.s.default_city)
         if station is None:
             return "❌ Станция не найдена в stations.yaml", kb_main_inline()
         results = await awc.fetch_latest(station.icao)
@@ -353,7 +354,7 @@ class TelegramBot:
         result = await disc.run_once()
         events = list(result.new_events) + list(result.known_events)
 
-        # Fallback: probe today +/-1 day for all stations in stations.yaml
+        # Fallback: probe today for all stations in stations.yaml
         if not events:
             cfg = get_stations()
             months = [
@@ -365,16 +366,15 @@ class TelegramBot:
                     continue
                 z = st.zoneinfo
                 now_local = datetime.now(z)
-                for delta in (0, 1, -1):
-                    d = now_local + timedelta(days=delta)
-                    date_part = f"{months[d.month - 1]}-{d.day}-{d.year}"
-                    slug = st.slug_pattern.replace("*", date_part)
-                    try:
-                        ev = await fetch_event_or_raise(slug)
-                        if ev and not any(e.slug == ev.slug for e in events):
-                            events.append(ev)
-                    except Exception:
-                        continue
+                d = now_local
+                date_part = f"{months[d.month - 1]}-{d.day}-{d.year}"
+                slug = st.slug_pattern.replace("*", date_part)
+                try:
+                    ev = await fetch_event_or_raise(slug)
+                    if ev and not any(e.slug == ev.slug for e in events):
+                        events.append(ev)
+                except Exception:
+                    continue
 
         if not events:
             return (
@@ -420,14 +420,19 @@ class TelegramBot:
         return "\n".join(lines), InlineKeyboardMarkup(inline_keyboard=buttons)
 
     async def _default_slug(self) -> str | None:
-        """Resolve "the active slug" without relying on flaky Gamma fuzzy search.
+        """Pick the most relevant slug: active subscription > today markets > fallback."""
+        from ..storage import load_subscriptions
 
-        Strategy:
-          1. Build candidate slugs from today/±1 day using the configured
-             `EVENT_SLUG_PATTERNS` (e.g. `highest-temperature-in-moscow-on-*`).
-          2. Probe each via the exact-match Gamma endpoint.
-          3. Fall back to text search only if exact probing fails.
-        """
+        # 1. Active subscriptions take priority
+        subs = await load_subscriptions()
+        if self.market_manager is not None:
+            active = await self.market_manager.list_active()
+            for slug in active:
+                return slug
+        if subs:
+            return subs[0]
+
+        # 2. Legacy fallback via slug patterns
         months = [
             "january", "february", "march", "april", "may", "june",
             "july", "august", "september", "october", "november", "december",
@@ -437,7 +442,7 @@ class TelegramBot:
         z = station.zoneinfo if station else self.s.resolution_zone
         now_local = datetime.now(z)
 
-        for delta in (0, 1, -1, 2, -2):
+        for delta in (0, 1, -1):
             d = now_local + timedelta(days=delta)
             date_part = f"{months[d.month - 1]}-{d.day}-{d.year}"
             for pattern in self.s.slug_patterns:
@@ -448,15 +453,6 @@ class TelegramBot:
                     ev = None
                 if ev is not None:
                     return slug
-
-        # Fallback: text search
-        for pattern in self.s.slug_patterns:
-            try:
-                events = await polymarket_gamma.search_events(pattern, limit=5)
-            except Exception:
-                continue
-            if events:
-                return events[0].slug
         return None
 
     async def _edit_or_answer(
