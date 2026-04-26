@@ -154,14 +154,10 @@ class TelegramBot:
     async def _action_today(self) -> tuple[str, InlineKeyboardMarkup]:
         slug = await self._default_slug()
         if slug is None:
-            return "❌ Не найдено активных рынков по slug-маске.", kb_main_inline()
+            return "Нет активных рынков.", kb_main_inline()
         state = await load_state(slug)
         if not state:
-            return (
-                f"<b>{slug}</b>\nСостояние пока пустое — бот только что стартанул "
-                f"или ещё ни одного нового METAR не пришло.",
-                kb_main_inline(),
-            )
+            return f"<b>{slug}</b>\nПока нет данных.", kb_main_inline()
         cfg = get_stations()
         station = cfg.by_slug(slug)
         units = station.units if station else "celsius"
@@ -169,15 +165,13 @@ class TelegramBot:
         dmax = state.get("daily_max_info")
         last_t = state.get("last_temp_c")
         last_b = state.get("last_bucket_threshold")
-        last_ts = state.get("last_issue_time", "—")
-        lines = [f"📊 <b>{slug}</b>"]
+        lines = [f"📊 <b>{slug[:40]}</b>"]
         if last_t is not None:
-            lines.append(f"Текущая T (info): <b>{last_t:+.1f}{sym}</b>")
+            lines.append(f"Сейчас: <b>{last_t:+.1f}{sym}</b>")
         if dmax is not None:
-            lines.append(f"Дневной max (info): <b>{dmax:+.1f}{sym}</b> 🔝")
+            lines.append(f"Макс: <b>{dmax:+.1f}{sym}</b>")
         if last_b is not None:
-            lines.append(f"Текущий бакет: <b>{last_b}{sym}</b>")
-        lines.append(f"<i>Последнее обновление: {last_ts}</i>")
+            lines.append(f"Бакет: <b>{last_b}{sym}</b>")
         return "\n".join(lines), kb_main_inline()
 
     async def _action_buckets(
@@ -221,42 +215,28 @@ class TelegramBot:
         from .. import http_client
 
         client = await http_client.get_client()
-        synop_token = (
-            self.s.synoptic_token.get_secret_value() if self.s.synoptic_token else ""
-        )
         checks = [
-            (
-                "AWC",
-                "https://aviationweather.gov/api/data/metar?ids=UUWW&format=json&hours=1",
-            ),
+            ("AWC", "https://aviationweather.gov/api/data/metar?ids=KNYC&format=json&hours=1"),
             ("AVWX", "https://avwx.rest"),
-            ("Iastate", "https://mesonet.agron.iastate.edu"),
-            (
-                "Synoptic",
-                f"https://api.synopticdata.com/v2/stations/metadata?stid=UUWW&token={synop_token}",
-            ),
+            ("Synoptic", "https://api.synopticdata.com/v2/stations/metadata?stid=KNYC"),
             ("Polymarket", "https://gamma-api.polymarket.com/events?limit=1"),
             ("Telegram", "https://api.telegram.org"),
         ]
         rows = []
         for name, url in checks:
             t0 = time.monotonic()
-            ok, status = False, "?"
+            ok = False
             try:
                 r = await client.get(url, timeout=10)
                 ok = r.status_code < 500
-                status = str(r.status_code)
-            except Exception as e:
-                status = type(e).__name__[:12]
+            except Exception:
+                pass
             ms = int((time.monotonic() - t0) * 1000)
-            rows.append({"name": name, "ok": ok, "latency_ms": ms, "last_seen": status})
+            rows.append({"name": name, "ok": ok, "latency_ms": ms})
         return ui.fmt_sources(rows), kb_main_inline()
 
     async def _action_events(self) -> tuple[str, InlineKeyboardMarkup]:
-        """List markets matching the configured slug pattern by probing
-        the next 14 days (and previous 2). Cheap and avoids Gamma's
-        unreliable `q=` search.
-        """
+        """List markets matching the configured slug pattern."""
         months = [
             "january", "february", "march", "april", "may", "june",
             "july", "august", "september", "october", "november", "december",
@@ -268,7 +248,7 @@ class TelegramBot:
 
         found: list[MarketEvent] = []
         seen: set[str] = set()
-        for delta in range(-2, 14):
+        for delta in range(-1, 3):
             d = now_local + timedelta(days=delta)
             date_part = f"{months[d.month - 1]}-{d.day}-{d.year}"
             for pattern in self.s.slug_patterns:
@@ -283,63 +263,45 @@ class TelegramBot:
                 if ev is not None:
                     found.append(ev)
 
-        # Fallback to text search if direct probing returned nothing
         if not found:
-            for p in self.s.slug_patterns:
-                try:
-                    found.extend(await polymarket_gamma.search_events(p, limit=20))
-                except Exception:
-                    continue
-
-        if not found:
-            return "Активных рынков не найдено по slug-маскам.", kb_main_inline()
-        lines = [f"• <code>{e.slug}</code> ({len(e.buckets)} buckets)" for e in found[:30]]
-        return "<b>🎯 Активные рынки</b>:\n" + "\n".join(lines), kb_main_inline()
+            return "Рынков не найдено.", kb_main_inline()
+        lines = [f"• {e.slug[:50]} ({len(e.buckets)} бакетов)" for e in found[:10]]
+        return "<b>Рынки</b>:\n" + "\n".join(lines), kb_main_inline()
 
     async def _action_forecast(self) -> tuple[str, InlineKeyboardMarkup]:
         slug = await self._default_slug()
         if slug is None:
-            return "❌ Нет активного рынка для прогноза.", kb_main_inline()
+            return "Нет активного рынка.", kb_main_inline()
         state = await load_state(slug)
         probs = state.get("bucket_probabilities", []) if state else []
         if not probs:
-            return (
-                f"<b>{slug}</b>\nПрогноз ещё не построен — forecast_engine обновляется "
-                f"раз в 15 мин после старта бота.",
-                kb_main_inline(),
-            )
-        lines = [f"📈 <b>Прогноз бакетов</b>: {slug}", "<pre>"]
+            return f"<b>{slug}</b>\nПрогноз появится через ~15 мин.", kb_main_inline()
+        lines = [f"📈 <b>Прогноз</b>: {slug}", "<pre>"]
         width = max(len(p["title"]) for p in probs)
         for p in probs:
             title = p["title"].ljust(width)
-            lines.append(f"{title}  P_model={p['p_model']:.2f}")
+            lines.append(f"{title}  {p['p_model']:.0%}")
         lines.append("</pre>")
         return "\n".join(lines), kb_main_inline()
 
     def _settings_text(self) -> str:
         return (
             "⚙ <b>Настройки</b>\n\n"
-            f"Default city: <code>{self.s.default_city}</code>\n"
-            f"TZ резолва: <code>{self.s.resolution_timezone}</code>\n"
-            f"ΔT threshold: <b>{self.s.delta_notify_threshold_c}°C</b>\n"
-            f"Poll: <b>{self.s.poll_interval_seconds}s</b> ± {self.s.poll_jitter_seconds}s\n"
-            f"Slug patterns: <code>{', '.join(self.s.slug_patterns)}</code>\n"
-            f"Admins: <code>{', '.join(map(str, self.s.admin_ids))}</code>\n\n"
-            "<i>Изменения через .env + restart vnukovo-bot.</i>"
+            f"Город: {self.s.default_city}\n"
+            f"Проверка: каждые {self.s.poll_interval_seconds}с\n"
+            f"Админы: {len(self.s.admin_ids)}"
         )
 
     def _help_text(self) -> str:
         return (
-            "<b>Команды:</b>\n"
-            "/start — меню + клавиатура\n"
-            "/now — текущая T в Vnukovo\n"
-            "/today — running max + бакет\n"
-            "/buckets [slug] — таблица бакетов с ценами\n"
-            "/sources — статус источников (live ping)\n"
-            "/events — активные рынки на Polymarket\n"
-            "/resolve YYYY-MM-DD &lt;slug&gt; — отчёт резолва\n"
-            "/help — эта справка\n\n"
-            "Те же действия — кнопками внизу или под сообщением."
+            "<b>Команды</b>\n"
+            "/markets — найти рынки\n"
+            "/mymarkets — мои подписки\n"
+            "/now — текущая температура\n"
+            "/today — дневной макс + бакет\n"
+            "/buckets — цены бакетов\n"
+            "/sources — пинг источников\n"
+            "/resolve — финальный отчёт"
         )
 
     async def _action_markets(self) -> tuple[str, InlineKeyboardMarkup]:
@@ -377,20 +339,13 @@ class TelegramBot:
                     continue
 
         if not events:
-            return (
-                "❌ Не удалось найти активные рынки.\n\n"
-                "Возможные причины:\n"
-                "• Polymarket API недоступен (проверь прокси)\n"
-                "• Для этой даты ещё нет рынков\n"
-                "• Неверный slug-pattern в stations.yaml",
-                kb_main_inline(),
-            )
-        lines = ["<b>Активные рынки</b> (нажми чтобы подписаться):"]
+            return "Рынков не найдено. Попробуй позже.", kb_main_inline()
+        lines = ["<b>Рынки</b> — нажми ▶️"]
         buttons = []
-        for ev in events[:20]:
-            lines.append(f"• {ev.slug} ({len(ev.buckets)} бакетов)")
+        for ev in events[:10]:
+            lines.append(f"• {ev.slug[:45]}")
             buttons.append(
-                [InlineKeyboardButton(text=f"▶️ {ev.slug[:40]}", callback_data=f"subscribe:{ev.slug}")]
+                [InlineKeyboardButton(text=f"▶️ Подписаться", callback_data=f"subscribe:{ev.slug}")]
             )
         return "\n".join(lines), InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -403,19 +358,15 @@ class TelegramBot:
         if self.market_manager is not None:
             active = await self.market_manager.list_active()
         if not subs and not active:
-            return (
-                "⭐ <b>Мои рынки</b>\n\n"
-                "Нет активных подписок. Используй /markets чтобы найти рынки.",
-                kb_main_inline(),
-            )
+            return "⭐ Нет подписок. /markets — найти рынки.", kb_main_inline()
         lines = ["⭐ <b>Мои рынки</b>"]
         buttons = []
         seen = set(subs) | set(active)
         for slug in sorted(seen):
             status = "🟢" if slug in active else "⏸"
-            lines.append(f"{status} {slug}")
+            lines.append(f"{status} {slug[:50]}")
             buttons.append(
-                [InlineKeyboardButton(text=f"⏹ Отписаться от {slug[:36]}", callback_data=f"unsubscribe:{slug}")]
+                [InlineKeyboardButton(text="⏹ Отписаться", callback_data=f"unsubscribe:{slug}")]
             )
         return "\n".join(lines), InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -480,9 +431,10 @@ class TelegramBot:
         @dp.message(CommandStart())
         async def _start(m: Message) -> None:
             await m.answer(
-                "🌡 <b>Vnukovo Polymarket Bot</b>\n\n"
-                "Кнопки внизу — быстрый доступ ко всему.\n\n"
-                "Команды: /now, /today, /buckets, /sources, /events, /resolve, /help",
+                "🌡 <b>Weather Bot</b>\n\n"
+                "📋 /markets — найти рынки\n"
+                "⭐ /mymarkets — мои подписки\n"
+                "❓ /help — помощь",
                 reply_markup=kb_main_reply(),
             )
 
