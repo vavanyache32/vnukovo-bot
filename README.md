@@ -370,3 +370,5 @@ docs/example_resolution.json
 ## 14. Лицензия
 
 MIT.
+#   d e p l o y   t e s t  
+ 
