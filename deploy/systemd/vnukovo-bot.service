@@ -1,0 +1,29 @@
+[Unit]
+Description=Vnukovo (Polymarket weather) bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=botuser
+Group=botuser
+WorkingDirectory=/opt/vnukovo-bot
+EnvironmentFile=/etc/vnukovo-bot.env
+ExecStart=/opt/vnukovo-bot/.venv/bin/python -m src.cli monitor
+Restart=always
+RestartSec=5
+KillSignal=SIGINT
+TimeoutStopSec=30
+StandardOutput=journal
+StandardError=journal
+LimitNOFILE=8192
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/vnukovo-bot/data
+
+[Install]
+WantedBy=multi-user.target

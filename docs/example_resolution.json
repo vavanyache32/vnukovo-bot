@@ -1,0 +1,19 @@
+{
+  "slug": "highest-temperature-in-moscow-on-april-26-2026",
+  "event_id": "412007",
+  "station": "UUWW",
+  "date_local": "2026-04-26",
+  "timezone": "Europe/Moscow",
+  "t_max_resolve_whole_c": 18,
+  "t_max_resolve_local": 18,
+  "t_max_resolve_utc": 17,
+  "t_max_info_metar_c": 17.8,
+  "winning_bucket_title": "18°C",
+  "winning_bucket_threshold": 18,
+  "hourly_count": 24,
+  "finalized": true,
+  "revisions_locked": true,
+  "source": "synoptic",
+  "raw_artifact_path": "data/raw/2026-04-26/synoptic_UUWW_202604252100_202604262100.json",
+  "generated_at": "2026-04-27T03:15:00Z"
+}

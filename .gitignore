@@ -1,0 +1,36 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+env/
+.idea/
+.vscode/
+.DS_Store
+
+# secrets / runtime
+.env
+.env.*
+!.env.example
+data/
+!data/.gitkeep
+*.db
+*.sqlite*
+logs/
+*.log
+
+# build
+dist/
+build/
+.eggs/
+
+# docker
+.dockerignore.local

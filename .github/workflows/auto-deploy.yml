@@ -1,0 +1,38 @@
+name: auto-deploy
+
+on:
+  push:
+    branches: [main, master]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            set -euo pipefail
+            cd /opt/vnukovo-bot
+            git pull origin main || git pull origin master
+            source .venv/bin/activate
+            pip install -e .
+            sudo systemctl daemon-reload
+            sudo systemctl restart vnukovo-bot
+            sleep 3
+            sudo systemctl status vnukovo-bot --no-pager
+
+      - name: Notify Telegram
+        if: always()
+        env:
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_ADMIN_IDS }}
+        run: |
+          status="${{ job.status }}"
+          curl -s "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+            -d chat_id="${CHAT_ID}" \
+            -d text="Auto-deploy: ${status}"

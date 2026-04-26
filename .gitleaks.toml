@@ -1,0 +1,3 @@
+[allowlist]
+description = "Ignore example env file"
+files = ['''(^|/)\.env\.example$''', '''(^|/)tests/fixtures/''', '''(^|/)stations\.yaml$''']

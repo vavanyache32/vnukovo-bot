@@ -1,0 +1,50 @@
+services:
+  bot:
+    image: ghcr.io/yourorg/vnukovo-bot:${TAG:-latest}
+    container_name: vnukovo-bot
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    volumes:
+      - ../data:/app/data
+      - ../stations.yaml:/app/stations.yaml:ro
+    ports:
+      - "127.0.0.1:8080:8080"   # health/metrics — only via SSH tunnel
+    networks:
+      - bot-net
+    command: ["monitor"]
+
+  prometheus:
+    image: prom/prometheus:v2.51.2
+    container_name: vnukovo-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prom_data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    networks:
+      - bot-net
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: vnukovo-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-changeme}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana:/etc/grafana/provisioning/dashboards
+    ports:
+      - "127.0.0.1:3000:3000"
+    networks:
+      - bot-net
+
+volumes:
+  prom_data:
+  grafana_data:
+
+networks:
+  bot-net:
+    driver: bridge

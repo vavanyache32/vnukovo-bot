@@ -1,0 +1,65 @@
+# slug-pattern -> station + правила резолва
+# Один инстанс бота обслуживает все города одновременно.
+# Patterns поддерживают подстановку *.
+
+stations:
+  moscow:
+    icao: UUWW
+    name: "Vnukovo International Airport"
+    wmo: "27612"
+    lat: 55.5915
+    lon: 37.2615
+    tz: Europe/Moscow
+    fallback_icao: [UUEE, UUDD]
+    resolve_source: synoptic
+    synoptic_stid: UUWW
+    slug_pattern: "highest-temperature-in-moscow-on-*"
+
+  new-york:
+    icao: KLGA
+    name: "LaGuardia Airport, NY"
+    wmo: "72503"
+    lat: 40.7789
+    lon: -73.9692
+    tz: America/New_York
+    fallback_icao: [KNYC, KEWR]
+    resolve_source: wunderground
+    synoptic_stid: KLGA:9:US
+    slug_pattern: "highest-temperature-in-nyc-on-*"
+    units: fahrenheit
+
+  london:
+    icao: EGLL
+    name: "London Heathrow"
+    wmo: "03772"
+    lat: 51.4775
+    lon: -0.4614
+    tz: Europe/London
+    fallback_icao: [EGLC, EGKK]
+    resolve_source: synoptic
+    synoptic_stid: EGLL
+    slug_pattern: "highest-temperature-in-london-on-*"
+
+  miami:
+    icao: KMIA
+    name: "Miami International"
+    wmo: "72202"
+    lat: 25.7959
+    lon: -80.2870
+    tz: America/New_York
+    fallback_icao: [KFLL]
+    resolve_source: synoptic
+    synoptic_stid: KMIA
+    slug_pattern: "highest-temperature-in-miami-on-*"
+
+  los-angeles:
+    icao: KLAX
+    name: "Los Angeles Intl"
+    wmo: "72295"
+    lat: 33.9425
+    lon: -118.4081
+    tz: America/Los_Angeles
+    fallback_icao: [KBUR, KSNA]
+    resolve_source: synoptic
+    synoptic_stid: KLAX
+    slug_pattern: "highest-temperature-in-la-on-*"

@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Exec(dir)",
+      "Exec(mkdir)",
+      "Exec(python)",
+      "Exec(source)",
+      "Exec(pip install)",
+      "Exec(cat)",
+      "Exec(head)",
+      "Exec(ruff check)",
+      "Exec(find)",
+      "Exec(ls)"
+    ]
+  }
+}
